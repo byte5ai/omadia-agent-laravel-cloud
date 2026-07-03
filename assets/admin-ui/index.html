@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Laravel Cloud · Admin</title>
+    <!--
+      Harness shared baseline stylesheet: design tokens (light + dark), element
+      styling, .harness-* helper classes. Same-origin via the web-dev /bot-api
+      rewrite → middleware /api/_harness/admin-ui.css.
+    -->
+    <link rel="stylesheet" href="/bot-api/_harness/admin-ui.css" />
+  </head>
+  <body class="harness-admin">
+    <h1>Laravel Cloud — Status</h1>
+    <p class="harness-subtitle">
+      Operator-only. Read-only ops copilot connection health.
+    </p>
+
+    <!-- #region builder:admin-ui-body -->
+    <style>
+      .lc-badge {
+        display: inline-block;
+        padding: 0.15rem 0.6rem;
+        border-radius: var(--radius-pill);
+        font-family: var(--font-mono);
+        font-size: 0.85em;
+        font-weight: 600;
+      }
+      .lc-badge--ok { background: var(--success); color: var(--bg); }
+      .lc-badge--warn { background: var(--warning); color: var(--bg); }
+      .lc-badge--err { background: var(--danger); color: var(--bg); }
+      .lc-grid {
+        display: grid;
+        grid-template-columns: max-content 1fr;
+        gap: 0.5rem 1rem;
+        margin: 1rem 0;
+        max-width: var(--harness-iframe-max);
+      }
+      .lc-grid dt { color: var(--fg-muted); font-weight: 600; }
+      .lc-grid dd { margin: 0; color: var(--fg-strong); }
+      #lc-checked { color: var(--fg-subtle); font-size: 0.8em; margin-top: 1rem; }
+      @media (max-width: 480px) {
+        .lc-grid { grid-template-columns: 1fr; gap: 0.15rem 0; }
+        .lc-grid dd { margin-bottom: 0.5rem; }
+      }
+    </style>
+
+    <div id="lc-err" class="harness-banner-error" role="alert" hidden></div>
+    <p id="lc-loading" class="harness-empty">Loading status…</p>
+
+    <div id="lc-panel" hidden>
+      <p><span id="lc-token-badge" class="lc-badge">—</span></p>
+      <dl class="lc-grid">
+        <dt>Organization</dt><dd id="lc-org">—</dd>
+        <dt>Applications</dt><dd id="lc-apps">—</dd>
+        <dt>Rate limit</dt><dd id="lc-rate">—</dd>
+        <dt>Token expiry</dt><dd id="lc-expiry">—</dd>
+      </dl>
+      <div id="lc-note" class="harness-banner-info" role="status" hidden></div>
+      <p><button id="lc-refresh" class="harness-btn" type="button">Refresh</button></p>
+      <p id="lc-checked"></p>
+    </div>
+
+    <script>
+      function text(id, value) {
+        document.getElementById(id).textContent = value;
+      }
+
+      function renderRate(rl) {
+        if (!rl) return 'unknown';
+        const rem = rl.remaining == null ? '?' : rl.remaining;
+        const lim = rl.limit == null ? '?' : rl.limit;
+        const reset = rl.resetSeconds == null ? '' : ` · resets in ${rl.resetSeconds}s`;
+        return `${rem} / ${lim} remaining${reset}`;
+      }
+
+      function renderExpiry(s) {
+        if (!s.tokenExpiresAt) {
+          return 'not provided — expiry is reported reactively on first 401';
+        }
+        if (s.daysToExpiry == null) return s.tokenExpiresAt;
+        if (s.daysToExpiry <= 0) return `${s.tokenExpiresAt} — EXPIRED`;
+        return `${s.tokenExpiresAt} — ${s.daysToExpiry} day(s) left`;
+      }
+
+      function renderBadge(s) {
+        const el = document.getElementById('lc-token-badge');
+        el.classList.remove('lc-badge--ok', 'lc-badge--warn', 'lc-badge--err');
+        if (s.tokenState === 'ok') {
+          const soon = s.daysToExpiry != null && s.daysToExpiry <= 14;
+          el.classList.add(soon ? 'lc-badge--warn' : 'lc-badge--ok');
+          el.textContent = soon ? 'TOKEN OK · EXPIRES SOON' : 'TOKEN OK';
+        } else if (s.tokenState === 'token_invalid') {
+          el.classList.add('lc-badge--err');
+          el.textContent = 'TOKEN INVALID / EXPIRED';
+        } else {
+          el.classList.add('lc-badge--err');
+          el.textContent = 'CONNECTION ERROR';
+        }
+      }
+
+      async function loadStatus() {
+        const errEl = document.getElementById('lc-err');
+        errEl.hidden = true;
+        document.getElementById('lc-loading').hidden = false;
+        document.getElementById('lc-panel').hidden = true;
+        try {
+          const data = await fetch('api/status').then((r) => r.json());
+          if (!data.ok) throw new Error(data.error || 'Unknown error');
+          const s = data.status;
+          renderBadge(s);
+          text('lc-org', s.organizationName || '—');
+          text(
+            'lc-apps',
+            s.applicationCount == null
+              ? '—'
+              : s.applicationCount + (s.applicationCountTruncated ? '+' : ''),
+          );
+          text('lc-rate', renderRate(s.rateLimit));
+          text('lc-expiry', renderExpiry(s));
+          const note = document.getElementById('lc-note');
+          if (s.message) {
+            note.textContent = s.message;
+            note.hidden = false;
+          } else {
+            note.hidden = true;
+          }
+          text('lc-checked', 'Checked ' + s.checkedAt);
+        } catch (err) {
+          errEl.textContent = err.message;
+          errEl.hidden = false;
+        } finally {
+          document.getElementById('lc-loading').hidden = true;
+          document.getElementById('lc-panel').hidden = false;
+        }
+      }
+
+      document.getElementById('lc-refresh').addEventListener('click', loadStatus);
+      loadStatus();
+    </script>
+    <!-- #endregion -->
+  </body>
+</html>

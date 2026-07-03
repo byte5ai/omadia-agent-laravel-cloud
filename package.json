@@ -1,0 +1,35 @@
+{
+  "name": "@omadia/agent-laravel-cloud",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "description": "Read-only Laravel Cloud ops copilot for Omadia — deployment status, environment/instance health, metrics, logs and resource inventory. No mutating actions.",
+  "license": "MIT",
+  "author": "byte5",
+  "homepage": "https://github.com/byte5ai/omadia-agent-laravel-cloud",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/byte5ai/omadia-agent-laravel-cloud.git"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "build": "node scripts/build-zip.mjs"
+  },
+  "peerDependencies": {
+    "zod": "^4.0.0",
+    "express": "^5.1.0"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/node": "^20.0.0",
+    "express": "^5.1.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.0.0",
+    "zod": "^4.0.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
