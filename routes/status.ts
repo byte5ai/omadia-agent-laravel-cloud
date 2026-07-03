@@ -57,8 +57,7 @@ export function createAdminRouter(opts: AdminRouterOptions): express.Router {
     const daysToExpiry = daysUntil(opts.tokenExpiresAt);
     try {
       const org = await opts.client.getOrganization();
-      const organizationName =
-        (org.attributes?.name as string | undefined) ?? null;
+      const organizationName = (org.name as string | undefined) ?? null;
 
       let applicationCount: number | null = null;
       let applicationCountTruncated = false;

@@ -175,10 +175,15 @@ export function createToolkit(opts: ToolkitOptions): Toolkit {
         log('tool:get_deployment', { deployment, include_logs });
         const detail = await client.getDeployment(deployment);
         if (!include_logs) return detail;
-        const logs = await client.getDeploymentLogs(deployment).catch((err) => ({
-          _logs_error: (err as Error).message,
-        }));
-        return { deployment: detail, logs };
+        // Fold logs into the flat detail as its detail-rows: the platform's
+        // Dataset Store promotes the single record-array field (`log_lines`) to
+        // rows and broadcasts the deployment's scalar columns onto each — so
+        // nothing renders as "[nested]" and the deployment context is kept.
+        const logsRaw = await client
+          .getDeploymentLogs(deployment)
+          .catch((err) => [{ _logs_error: (err as Error).message }]);
+        const log_lines = Array.isArray(logsRaw) ? logsRaw : [logsRaw];
+        return { ...detail, log_lines };
       },
     },
     {
@@ -259,11 +264,22 @@ export function createToolkit(opts: ToolkitOptions): Toolkit {
       async run(raw) {
         const { period } = usageInput.parse(raw ?? {});
         log('tool:get_account_overview', { period });
-        const organization = await client.getOrganization();
+        const org = await client.getOrganization();
         const usage = await client
           .getUsage(period)
           .catch((err) => ({ _usage_error: (err as Error).message }));
-        return { organization, usage };
+        // Merge into ONE flat row so nothing renders as "[nested]". Usage keys
+        // are prefixed to avoid colliding with the organization columns.
+        const merged: Record<string, unknown> = {
+          organization: org.name ?? null,
+          slug: org.slug ?? null,
+        };
+        if (usage !== null && typeof usage === 'object' && !Array.isArray(usage)) {
+          for (const [k, v] of Object.entries(usage)) merged[`usage_${k}`] = v;
+        } else {
+          merged.usage = typeof usage === 'string' ? usage : JSON.stringify(usage);
+        }
+        return merged;
       },
     },
   ];

@@ -72,7 +72,7 @@ export async function activate(ctx: PluginContext): Promise<AgentHandle> {
         detail: 'Could not reach Laravel Cloud within the startup budget — check the status page.',
       });
     } else {
-      const orgName = (result.attributes?.name as string | undefined) ?? 'organization';
+      const orgName = (result.name as string | undefined) ?? 'organization';
       const days = daysUntil(tokenExpiresAt);
       if (days != null && days <= 0) {
         ctx.status.report({

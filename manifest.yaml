@@ -15,7 +15,7 @@ identity:
   kind: "agent"
   domain: "laravel.cloud"
   name: "Laravel Cloud"
-  version: "0.1.0"
+  version: "0.1.1"
   description: >
     Read-only ops copilot for Laravel Cloud: deployment status & history,
     environment / instance health, metrics, runtime & deploy logs, resource

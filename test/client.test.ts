@@ -63,8 +63,20 @@ describe('sanitize()', () => {
   });
 });
 
+function isFlatRow(row: Record<string, unknown>): boolean {
+  // No cell is a plain object or an array-of-objects (both render as "[nested]"
+  // / "[N records]" in the platform's tabular tool-result renderer).
+  return Object.values(row).every((v) => {
+    if (v === null || typeof v !== 'object') return true;
+    if (Array.isArray(v)) {
+      return v.every((e) => e === null || typeof e !== 'object');
+    }
+    return false;
+  });
+}
+
 describe('getEnvironment integration', () => {
-  it('never returns environment-variable values through the client', async () => {
+  it('flattens to a display row: env-variable NAMES only, no values, no nesting', async () => {
     const client = makeClient(async () =>
       jsonResponse({
         data: {
@@ -72,14 +84,52 @@ describe('getEnvironment integration', () => {
           type: 'environment',
           attributes: {
             name: 'production',
-            environment_variables: [{ key: 'APP_KEY', value: 'leak-me' }],
+            region: 'eu-central-1',
+            environment_variables: [
+              { key: 'APP_KEY', value: 'leak-me' },
+              { key: 'DB_PASSWORD', value: 'nope' },
+            ],
+            network_settings: { cache: { strategy: 'aggressive' } },
           },
         },
       }),
     );
     const res = await client.getEnvironment('env1');
-    expect(res.attributes.environment_variables).toEqual([{ key: 'APP_KEY' }]);
+    // Attributes hoisted to the top level (not res.attributes.name).
+    expect(res.name).toBe('production');
+    expect(res.region).toBe('eu-central-1');
+    // Env vars become a scalar name-array; values are gone.
+    expect(res.environment_variables).toEqual(['APP_KEY', 'DB_PASSWORD']);
     expect(JSON.stringify(res)).not.toContain('leak-me');
+    // Nested config object is hoisted, never left as a nested cell.
+    expect(isFlatRow(res)).toBe(true);
+  });
+});
+
+describe('flat output shape (no "[nested]" cells)', () => {
+  it('list rows are flat records of scalars / scalar-arrays', async () => {
+    const client = makeClient(async () =>
+      jsonResponse({
+        data: [
+          {
+            id: 'app-1',
+            type: 'application',
+            attributes: { name: 'Store', slug: 'store', region: 'eu-west-1', repository: { provider: 'github', name: 'acme/store' } },
+          },
+        ],
+        links: { next: null },
+        meta: { last_page: 1 },
+      }),
+    );
+    const res = await client.listApplications();
+    expect(res.items).toHaveLength(1);
+    const row = res.items[0]!;
+    expect(row.name).toBe('Store');
+    expect(row.id).toBe('app-1');
+    // Nested `repository` object hoisted to repository_provider / repository_name.
+    expect(row.repository_provider).toBe('github');
+    expect(row.repository_name).toBe('acme/store');
+    expect(isFlatRow(row)).toBe(true);
   });
 });
 

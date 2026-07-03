@@ -15,6 +15,13 @@
  *     and therefore never reaches the LLM. This is the whole safety story:
  *     the Laravel Cloud token is un-scopable god-mode, so the plugin, not the
  *     credential, is the only line of defense.
+ *
+ * OUTPUT SHAPE (see spec 006, FR-T3):
+ *   - Results are FLAT records (scalars + scalar-arrays), NOT JSON:API
+ *     envelopes. The platform's tabular tool-result renderer collapses any
+ *     nested-object cell to "[nested]", so `flattenRecord()` hoists a
+ *     resource's `attributes` to the top level, turns arrays-of-objects into
+ *     scalar name-arrays, and lifts one level of nested-object scalars.
  */
 
 // Media type — verified against the OpenAPI (resources are JSON:API).
@@ -123,7 +130,7 @@ const SECRET_EXACT = new Set(['token', 'access_token', 'refresh_token', 'api_tok
  *  - `environment_variables: [{ key, value }]` → keep `key`, drop `value`
  *    (env vars surface as NAMES ONLY, never values).
  *  - `connection` (DB credentials object) → replaced with a redaction marker.
- *  - any `*password*` / `*secret*` / `*private_key*` / bare token key → dropped.
+ *  - any password / secret / private_key / bare token key → dropped.
  */
 export function sanitize(node: unknown): unknown {
   if (Array.isArray(node)) return node.map(sanitize);
@@ -157,22 +164,86 @@ export function sanitize(node: unknown): unknown {
 }
 
 // ---------------------------------------------------------------------------
+// Flattening — make results tabular so the platform renderer never shows
+// "[nested]" (see file header + spec FR-T3)
+// ---------------------------------------------------------------------------
+
+/** A flat, display-ready row: scalar or scalar-array values only. */
+export type FlatRecord = Record<string, unknown>;
+
+function isScalar(v: unknown): boolean {
+  return (
+    v === null ||
+    v === undefined ||
+    typeof v === 'string' ||
+    typeof v === 'number' ||
+    typeof v === 'boolean'
+  );
+}
+
+/**
+ * Flatten one plain object into a row of scalars / scalar-arrays:
+ *   - scalars kept as-is;
+ *   - scalar arrays kept as-is (the renderer joins them, e.g. "a, b");
+ *   - arrays of objects reduced to a scalar array of their key/name/slug/id
+ *     (e.g. `environment_variables:[{key}]` → `["APP_KEY", …]`), or an
+ *     "N item(s)" count when no obvious label field exists;
+ *   - nested objects have their scalar leaves hoisted as `parent_child`;
+ *     an object with no scalar leaves becomes "n/a".
+ * No value in the returned row is ever a plain object or array-of-objects.
+ */
+export function flattenRecord(obj: Record<string, unknown>): FlatRecord {
+  const out: FlatRecord = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (isScalar(value)) {
+      out[key] = value;
+      continue;
+    }
+    if (Array.isArray(value)) {
+      if (value.every(isScalar)) {
+        out[key] = value;
+        continue;
+      }
+      const labels = value
+        .map((e) => {
+          if (e !== null && typeof e === 'object' && !Array.isArray(e)) {
+            const r = e as FlatRecord;
+            return r.key ?? r.name ?? r.slug ?? r.id ?? null;
+          }
+          return isScalar(e) ? e : null;
+        })
+        .filter((x) => x !== null && isScalar(x));
+      out[key] = labels.length > 0 ? labels : `${value.length} item(s)`;
+      continue;
+    }
+    // Plain object: hoist scalar leaves one level.
+    let hoisted = false;
+    for (const [ik, iv] of Object.entries(value as Record<string, unknown>)) {
+      if (isScalar(iv)) {
+        out[`${key}_${ik}`] = iv;
+        hoisted = true;
+      }
+    }
+    if (!hoisted) out[key] = 'n/a';
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------------------
 // Public shapes
 // ---------------------------------------------------------------------------
 
-export interface CloudResource {
-  id: string;
-  type: string;
-  attributes: Record<string, unknown>;
-  relationships?: Record<string, unknown>;
-}
-
+/**
+ * A list result in the "summary + detail" shape the platform's Dataset Store
+ * promotes to real rows: `items` are the detail rows, the scalar `truncated` /
+ * `total` fields are broadcast onto each row.
+ */
 export interface CloudList {
-  items: CloudResource[];
+  items: FlatRecord[];
   /** True if a page/size cap stopped the walk before the API ran out of data. */
   truncated: boolean;
-  /** JSON:API paginator total, when the API reports one. */
-  totalPages?: number | null;
+  /** JSON:API last-page count, when the API reports one. */
+  total: number | null;
 }
 
 export interface RateLimitSnapshot {
@@ -194,19 +265,19 @@ export interface EnvironmentLogQuery {
 }
 
 export interface LaravelCloudClient {
-  /** Self-test target: organization name + slug (secret-free). */
-  getOrganization(): Promise<CloudResource>;
+  /** Self-test target: organization name + slug (secret-free flat record). */
+  getOrganization(): Promise<FlatRecord>;
   getUsage(period?: number, environment?: string): Promise<unknown>;
 
   listApplications(filter?: { name?: string; region?: string }): Promise<CloudList>;
-  getApplication(application: string): Promise<CloudResource>;
+  getApplication(application: string): Promise<FlatRecord>;
   listEnvironments(application: string): Promise<CloudList>;
-  getEnvironment(environment: string): Promise<CloudResource>;
+  getEnvironment(environment: string): Promise<FlatRecord>;
   listDeployments(
     environment: string,
     filter?: { status?: string; branch_name?: string },
   ): Promise<CloudList>;
-  getDeployment(deployment: string): Promise<CloudResource>;
+  getDeployment(deployment: string): Promise<FlatRecord>;
   getDeploymentLogs(deployment: string): Promise<unknown>;
   getEnvironmentMetrics(environment: string, period?: MetricPeriod): Promise<unknown>;
   listEnvironmentLogs(environment: string, q: EnvironmentLogQuery): Promise<unknown>;
@@ -249,16 +320,12 @@ function truncateStrings(node: unknown): unknown {
   return node;
 }
 
-function toResource(raw: unknown): CloudResource {
+/** Sanitize + flatten one JSON:API resource into a display row. */
+function toRow(raw: unknown): FlatRecord {
   const clean = sanitize(raw) as Record<string, unknown>;
-  return {
-    id: String(clean.id ?? ''),
-    type: String(clean.type ?? ''),
-    attributes: (clean.attributes as Record<string, unknown>) ?? {},
-    ...(clean.relationships
-      ? { relationships: clean.relationships as Record<string, unknown> }
-      : {}),
-  };
+  const attrs = (clean.attributes as Record<string, unknown>) ?? {};
+  const merged: Record<string, unknown> = { id: clean.id, ...attrs };
+  return truncateStrings(flattenRecord(merged)) as FlatRecord;
 }
 
 export function createClient(opts: ClientOptions): LaravelCloudClient {
@@ -343,34 +410,34 @@ export function createClient(opts: ClientOptions): LaravelCloudClient {
     meta?: { last_page?: number | null };
   };
 
-  /** GET one resource → sanitized `CloudResource`. */
-  async function getOne(path: string, query?: Record<string, string | undefined>): Promise<CloudResource> {
+  /** GET one resource → sanitized, flattened row. */
+  async function getOne(path: string, query?: Record<string, string | undefined>): Promise<FlatRecord> {
     const body = await requestUrl<Envelope>(buildUrl(path, query));
-    return toResource(body.data ?? {});
+    return toRow(body.data ?? {});
   }
 
-  /** GET a paginated collection → sanitized items, capped (FR-H2/FR-H5). */
+  /** GET a paginated collection → flattened rows, capped (FR-H2/FR-H5). */
   async function getMany(
     path: string,
     query?: Record<string, string | undefined>,
     pageCap = DEFAULT_PAGE_CAP,
   ): Promise<CloudList> {
     let url: string | null = buildUrl(path, query);
-    const items: CloudResource[] = [];
+    const items: FlatRecord[] = [];
     let pages = 0;
-    let totalPages: number | null | undefined;
+    let total: number | null = null;
     let truncated = false;
 
     while (url) {
       const body: Envelope = await requestUrl<Envelope>(url);
-      totalPages = body.meta?.last_page ?? totalPages;
+      total = body.meta?.last_page ?? total;
       const data = Array.isArray(body.data) ? body.data : body.data ? [body.data] : [];
       for (const entry of data) {
         if (items.length >= MAX_LIST_ITEMS) {
           truncated = true;
           break;
         }
-        items.push(toResource(entry));
+        items.push(toRow(entry));
       }
       pages += 1;
       const next = body.links?.next ?? null;
@@ -384,12 +451,13 @@ export function createClient(opts: ClientOptions): LaravelCloudClient {
       }
     }
 
-    return { items, truncated, totalPages: totalPages ?? null };
+    return { items, truncated, total };
   }
 
-  /** GET a raw (non-JSON:API-list) payload → sanitized + string-truncated. For
-   *  metrics/usage/logs whose shapes are free-form; we never inspect them, we
-   *  just pass the secret-stripped, size-bounded body through. */
+  /** GET a free-form (non-JSON:API-list) payload → sanitized, flattened, and
+   *  size-bounded. Arrays of objects become flat rows (+ a trailing truncation
+   *  marker); a single object is flattened; scalars pass through. Used for
+   *  metrics / usage / logs whose shapes we never inspect. */
   async function getRaw(
     path: string,
     query?: Record<string, string | undefined>,
@@ -397,12 +465,26 @@ export function createClient(opts: ClientOptions): LaravelCloudClient {
   ): Promise<unknown> {
     const body = await requestUrl<Envelope>(buildUrl(path, query));
     const payload = 'data' in body ? body.data : body;
-    let sanitized = sanitize(payload);
-    if (Array.isArray(sanitized) && sanitized.length > maxItems) {
-      sanitized = [
-        ...sanitized.slice(0, maxItems),
-        { _truncated: `showing first ${maxItems} of ${sanitized.length} entries` },
-      ];
+    const sanitized = sanitize(payload);
+
+    if (Array.isArray(sanitized)) {
+      let rows: unknown[] = sanitized.map((e) =>
+        e !== null && typeof e === 'object' && !Array.isArray(e)
+          ? flattenRecord(e as Record<string, unknown>)
+          : { value: e },
+      );
+      let truncated = false;
+      if (rows.length > maxItems) {
+        rows = rows.slice(0, maxItems);
+        truncated = true;
+      }
+      if (truncated) {
+        rows.push({ _truncated: `showing first ${maxItems} of ${sanitized.length} entries` });
+      }
+      return truncateStrings(rows);
+    }
+    if (sanitized !== null && typeof sanitized === 'object') {
+      return truncateStrings(flattenRecord(sanitized as Record<string, unknown>));
     }
     return truncateStrings(sanitized);
   }
