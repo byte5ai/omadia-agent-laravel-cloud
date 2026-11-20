@@ -8,7 +8,7 @@
  *   3) Verify dist/<entry> exists (abort otherwise)
  *   4) Zip into out/<id>-<version>.zip
  *
- * Zip contents (strict): manifest.yaml, package.json, dist/, skills/,
+ * Zip contents (strict): manifest.yaml, package.json, dist/
  *                        assets/ (optional), README.md, LICENSE (optional)
  * NOT included: TS sources (*.ts outside dist/), node_modules, .env, out/
  *
@@ -67,7 +67,6 @@ const INCLUDE = [
   'manifest.yaml',
   'package.json',
   'dist',
-  'skills',
   'assets',
   'README.md',
   'LICENSE',

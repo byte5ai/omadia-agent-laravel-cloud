@@ -46,6 +46,10 @@ export interface PluginContext {
    *  `fetch` so the plugin stays future-proof. */
   readonly http?: HttpAccessor;
 
+  /** Tool runtime (spec 2042 §5.10): register every tool with the kernel.
+   *  `register` returns a dispose handle that close() MUST invoke. */
+  readonly tools: ToolsAccessor;
+
   readonly subAgent?: SubAgentAccessor;
   readonly knowledgeGraph?: KnowledgeGraphAccessor;
   readonly llm?: LlmAccessor;
@@ -206,4 +210,22 @@ export interface KnowledgeGraphAccessor {
   getNeighbors(nodeId: string): Promise<readonly unknown[]>;
   stats(): Promise<Readonly<Record<string, number>>>;
   readonly entitySystems: readonly string[];
+}
+
+/** Spec of one tool registered via `ctx.tools.register`. */
+export interface NativeToolSpec {
+  readonly name: string;
+  readonly description: string;
+  readonly input_schema: {
+    readonly type: 'object';
+    readonly properties: Record<string, unknown>;
+    readonly required?: readonly string[];
+  };
+}
+
+/** Handler of a registered tool; the returned string is the tool result. */
+export type NativeToolHandler = (input: unknown) => Promise<string>;
+
+export interface ToolsAccessor {
+  register(spec: NativeToolSpec, handler: NativeToolHandler): () => void;
 }
