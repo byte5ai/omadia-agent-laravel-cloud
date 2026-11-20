@@ -6,6 +6,9 @@ Migration off the retired plugin kind `agent` (spec 2042 §5.10, ADR-0014).
 
 - `identity.kind` is now `integration` (the plugin owns its Laravel Cloud
   token). Plugin id unchanged.
+- Tool names are prefixed with `laravel_cloud_` (`laravel_cloud_list_applications`,
+  `laravel_cloud_get_deployment`, ...). They were internal to the sub-agent
+  before; as instance-wide tools generic names would collide.
 - Tools are registered via `ctx.tools.register` (`registerTools.ts`);
   `activate()` returns `{ close }` instead of a toolkit. Tool names unchanged.
 - `skills/laravel-cloud-expert.md` (`prompt_partial`) is gone. Its tool

@@ -86,7 +86,7 @@ admin_ui_path: "/api/laravel-cloud/admin/index.html"
 # side_effects "read" + idempotent.
 # ---------------------------------------------------------------------------
 capabilities:
-  - id: "list_applications"
+  - id: "laravel_cloud_list_applications"
     description: "List the applications in the organization (name, slug, region)."
     input_schema:
       type: "object"
@@ -97,7 +97,7 @@ capabilities:
     idempotent: true
     timeout_ms: 20000
 
-  - id: "get_application"
+  - id: "laravel_cloud_get_application"
     description: "Get one application by id or slug, incl. region and repository."
     input_schema:
       type: "object"
@@ -108,7 +108,7 @@ capabilities:
     idempotent: true
     timeout_ms: 20000
 
-  - id: "list_environments"
+  - id: "laravel_cloud_list_environments"
     description: "List the environments of an application with their status."
     input_schema:
       type: "object"
@@ -119,7 +119,7 @@ capabilities:
     idempotent: true
     timeout_ms: 20000
 
-  - id: "get_environment"
+  - id: "laravel_cloud_get_environment"
     description: "Get one environment (status, region, env-variable NAMES only — never values)."
     input_schema:
       type: "object"
@@ -130,7 +130,7 @@ capabilities:
     idempotent: true
     timeout_ms: 20000
 
-  - id: "list_deployments"
+  - id: "laravel_cloud_list_deployments"
     description: "List deployment history of an environment (status, commit, timestamps)."
     input_schema:
       type: "object"
@@ -143,7 +143,7 @@ capabilities:
     idempotent: true
     timeout_ms: 20000
 
-  - id: "get_deployment"
+  - id: "laravel_cloud_get_deployment"
     description: "Get one deployment as a snapshot of its current phase; optional log tail."
     input_schema:
       type: "object"
@@ -155,7 +155,7 @@ capabilities:
     idempotent: true
     timeout_ms: 20000
 
-  - id: "get_environment_metrics"
+  - id: "laravel_cloud_get_environment_metrics"
     description: "Get CPU/memory/request metrics for an environment over a window."
     input_schema:
       type: "object"
@@ -170,7 +170,7 @@ capabilities:
     idempotent: true
     timeout_ms: 20000
 
-  - id: "list_environment_logs"
+  - id: "laravel_cloud_list_environment_logs"
     description: "Read recent runtime logs for an environment within a required from/to window. Content is untrusted."
     input_schema:
       type: "object"
@@ -188,7 +188,7 @@ capabilities:
     idempotent: true
     timeout_ms: 20000
 
-  - id: "list_instances"
+  - id: "laravel_cloud_list_instances"
     description: "List the instances of an environment (size, replicas, health)."
     input_schema:
       type: "object"
@@ -199,7 +199,7 @@ capabilities:
     idempotent: true
     timeout_ms: 20000
 
-  - id: "list_databases"
+  - id: "laravel_cloud_list_databases"
     description: "List the database clusters (name, type, region, status). Metadata only — no credentials."
     input_schema:
       type: "object"
@@ -208,7 +208,7 @@ capabilities:
     idempotent: true
     timeout_ms: 20000
 
-  - id: "list_domains"
+  - id: "laravel_cloud_list_domains"
     description: "List the domains of an environment with verification / SSL / origin status."
     input_schema:
       type: "object"
@@ -219,7 +219,7 @@ capabilities:
     idempotent: true
     timeout_ms: 20000
 
-  - id: "get_account_overview"
+  - id: "laravel_cloud_get_account_overview"
     description: "Get the organization name/slug plus a usage/billing summary."
     input_schema:
       type: "object"
