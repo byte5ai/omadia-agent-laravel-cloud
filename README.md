@@ -1,7 +1,10 @@
 # @omadia/agent-laravel-cloud
 
-A **read-only** Laravel Cloud ops copilot for [Omadia](https://omadia.ai),
-distributed as a standalone plugin via the Hub. Connect a Laravel Cloud API
+A **read-only** Laravel Cloud integration (plugin kind `integration`) for
+[Omadia](https://omadia.ai), distributed as a standalone plugin via the Hub. It
+registers 12 read-only tools; the agent that uses them is yours: the package
+ships two inactive agent templates (en/de) you can turn into an agent in the
+Agent Builder. Connect a Laravel Cloud API
 token and ask about your organization in a shared channel — deployment status &
 history, environment / instance health, metrics, runtime & deploy logs, and
 resource inventory (apps, environments, database clusters, domains, usage).
@@ -74,12 +77,12 @@ the Store → Local tab, or publish it to `hub.omadia.ai`.
 
 | Path | Purpose |
 |---|---|
-| `manifest.yaml` | Declarative agent definition (schema v1); 12 read-only capabilities. |
+| `manifest.yaml` | Declarative plugin definition (schema v1); 12 read-only capabilities (`side_effects: read`) and the `agent_templates`. |
 | `client.ts` | LLM-free Laravel Cloud HTTP client — pagination, secret-stripping, error mapping. Unit-tested. |
 | `toolkit.ts` | The 12 read-only tools (Zod inputs → client calls). |
+| `registerTools.ts` | Registers every tool via `ctx.tools.register`. |
 | `routes/status.ts` | Admin status-page router (`/api/laravel-cloud/admin`). |
-| `plugin.ts` | `activate()` / `close()` — client construction, self-test, route mount. |
-| `skills/laravel-cloud-expert.md` | System-prompt partial: role + untrusted-content + no-secrets guardrails. |
+| `plugin.ts` | `activate()` returns `{ close }` — client construction, self-test, tool registration, route mount. |
 | `assets/admin-ui/index.html` | Single-file operator status page. |
 | `types.ts` | Local `PluginContext` duplicate (the package compiles standalone). |
 

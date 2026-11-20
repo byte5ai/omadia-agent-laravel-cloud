@@ -23,6 +23,7 @@
   "include": [
     "./plugin.ts",
     "./toolkit.ts",
+    "./registerTools.ts",
     "./client.ts",
     "./types.ts",
     "./index.ts",

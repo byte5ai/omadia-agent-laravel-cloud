@@ -1,7 +1,8 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createClient, LaravelCloudError } from './client.js';
-import { createToolkit, type Toolkit } from './toolkit.js';
+import { registerToolkit } from './registerTools.js';
+import { createToolkit } from './toolkit.js';
 import { createAdminRouter } from './routes/status.js';
 import type { PluginContext } from './types.js';
 
@@ -16,15 +17,16 @@ const SELF_TEST_BUDGET_MS = 8_000;
 const EXPIRY_WARN_DAYS = 14;
 
 /**
- * Runtime contract (harness platform v1):
+ * Capability plugin of kind `integration` (spec 2042 §5.10, ADR-0014):
  *   - activate(ctx): 10s budget — self-test is ONE GET, no full crawl.
- *   - close():        5s budget — really release the route mount.
- *   - Return shape is fixed: { toolkit, close() }. LocalSubAgent, tool bridge,
- *     DomainTool wrap, tool-name derivation (→ query_laravel_cloud) and
- *     systemPrompt concat are handled by the runtime. No own LLM client here.
+ *   - every toolkit tool is registered via `ctx.tools.register`
+ *     (`registerTools.ts`); the kernel offers the tools to the agents the
+ *     operator granted this plugin to.
+ *   - close(): 5s budget — unregister the tools, release the route mount.
+ *   - No persona, no system prompt, no model loop and no own LLM client; the
+ *     former persona ships as `agent_templates` in manifest.yaml.
  */
-export interface AgentHandle {
-  readonly toolkit: Toolkit;
+export interface PluginHandle {
   close(): Promise<void>;
 }
 
@@ -35,7 +37,7 @@ function daysUntil(iso: string | undefined): number | null {
   return Math.floor((t - Date.now()) / 86_400_000);
 }
 
-export async function activate(ctx: PluginContext): Promise<AgentHandle> {
+export async function activate(ctx: PluginContext): Promise<PluginHandle> {
   ctx.log('activating');
 
   if (!ctx.http) {
@@ -104,6 +106,7 @@ export async function activate(ctx: PluginContext): Promise<AgentHandle> {
   }
 
   const toolkit = createToolkit({ client, log: ctx.log });
+  const disposeTools = registerToolkit(ctx, toolkit);
 
   // --- Admin status page ---------------------------------------------------
   const here = path.dirname(fileURLToPath(import.meta.url));
@@ -119,9 +122,9 @@ export async function activate(ctx: PluginContext): Promise<AgentHandle> {
   ctx.log('admin UI mounted at /api/laravel-cloud/admin/index.html');
 
   return {
-    toolkit,
     async close() {
       ctx.log('deactivating');
+      disposeTools();
       try {
         disposeRoute();
       } catch (err) {
