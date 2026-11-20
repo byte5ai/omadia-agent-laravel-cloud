@@ -10,7 +10,7 @@ Migration off the retired plugin kind `agent` (spec 2042 §5.10, ADR-0014).
   `laravel_cloud_get_deployment`, ...). They were internal to the sub-agent
   before; as instance-wide tools generic names would collide.
 - Tools are registered via `ctx.tools.register` (`registerTools.ts`);
-  `activate()` returns `{ close }` instead of a toolkit. Tool names unchanged.
+  `activate()` returns `{ close }` instead of a toolkit.
 - `skills/laravel-cloud-expert.md` (`prompt_partial`) is gone. Its tool
   knowledge moved into the tool descriptions and `playbook.when_to_use`; the
   persona ships as two inactive `agent_templates` (en, de).
